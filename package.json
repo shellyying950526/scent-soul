@@ -6,6 +6,6 @@
   "description": "AI 面相香水推荐师",
   "scripts": {
     "start": "npx serve .",
-    "build": "mkdir -p .vercel/output/static && cp -r * .vercel/output/static || true"
+    "build": "mkdir -p public && cp index.html index.tsx types.ts metadata.json public/ && cp -rf components services public/ 2>/dev/null || true"
   }
 }

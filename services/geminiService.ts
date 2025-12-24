@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { AnalysisResult } from "../types";
 
@@ -83,11 +84,13 @@ const responseSchema: Schema = {
 };
 
 export const analyzeFace = async (base64Image: string): Promise<AnalysisResult> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing");
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("API Key is missing. Please set API_KEY in Vercel environment variables.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
     const response = await ai.models.generateContent({
