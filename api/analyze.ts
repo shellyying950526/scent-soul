@@ -1,14 +1,28 @@
 
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 
-const SYSTEM_INSTRUCTION = `你是一位结合了面相学和调香艺术的专业顾问。请分析照片中人物的面部特征，解读性格，并推荐两款匹配的香水。`;
+// 使用 Vercel Edge Runtime 以获得最快响应
+export const config = {
+  runtime: 'edge',
+};
+
+const SYSTEM_INSTRUCTION = `
+你是一位结合了面相学和调香艺术的专业顾问。你的任务是通过分析照片中人物的面部特征，解读其性格特质，并推荐与之匹配的香水。
+
+## 工作流程
+1. 面相特征观察：观察眼睛、眉毛、鼻子、嘴巴、脸型、气质。
+2. 性格特质分析：分析外在人格（社交面具）和内在本我（真实自我）。
+3. 香水推荐：推荐“外在印象”与“内在真我”两款匹配香水。
+
+请保持专业、温暖、富有洞察力的语气，使用中文回答。
+`;
 
 const responseSchema: Schema = {
   type: Type.OBJECT,
   properties: {
-    observation: { type: Type.STRING },
-    outerPersona: { type: Type.STRING },
-    innerSelf: { type: Type.STRING },
+    observation: { type: Type.STRING, description: "面相特征详细描述" },
+    outerPersona: { type: Type.STRING, description: "外在人格分析" },
+    innerSelf: { type: Type.STRING, description: "内在本我分析" },
     perfumeOuter: {
       type: Type.OBJECT,
       properties: {
@@ -47,42 +61,59 @@ const responseSchema: Schema = {
       },
       required: ["brand", "name", "family", "notes", "reason", "occasion"],
     },
-    closingMessage: { type: Type.STRING },
+    closingMessage: { type: Type.STRING, description: "调香师寄语" },
   },
   required: ["observation", "outerPersona", "innerSelf", "perfumeOuter", "perfumeInner", "closingMessage"],
 };
 
-export default async function handler(req: any, res: any) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-
-  const { image } = req.body;
-  // 重要：API_KEY 仅在这里被读取，永远不会暴露给浏览器
-  const apiKey = process.env.API_KEY;
-
-  if (!apiKey) return res.status(500).json({ error: 'Server configuration error: Missing API Key' });
-  if (!image) return res.status(400).json({ error: 'Image data is required' });
-
-  const ai = new GoogleGenAI({ apiKey });
+export default async function handler(req: Request) {
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
+  }
 
   try {
+    const { image } = await req.json();
+    if (!image) {
+      return new Response(JSON.stringify({ error: 'Missing image data' }), { status: 400 });
+    }
+
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'Server configuration error: API Key missing' }), { status: 500 });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-image",
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
-          { inlineData: { mimeType: "image/jpeg", data: image } },
-          { text: "请基于这张肖像照进行面相与性格分析，并给出香水建议。" }
-        ]
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: image,
+            },
+          },
+          {
+            text: "请分析这张面孔，生成详细的香水推荐报告。请确保返回完整的 JSON 格式数据。",
+          },
+        ],
       },
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         responseMimeType: "application/json",
         responseSchema: responseSchema,
-      }
+      },
     });
 
-    return res.status(200).json(JSON.parse(response.text || '{}'));
+    const outputText = response.text;
+    return new Response(outputText, {
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    return res.status(500).json({ error: error.message || 'Internal Server Error' });
+    console.error("Proxy Error:", error);
+    return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

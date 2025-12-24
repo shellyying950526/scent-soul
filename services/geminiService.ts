@@ -12,13 +12,21 @@ export const analyzeFace = async (base64Image: string): Promise<AnalysisResult> 
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Server error');
+      const errorText = await response.text();
+      let errorMessage = `Status: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorMessage;
+      } catch (e) {
+        errorMessage = errorText || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
-    return await response.json();
+    const result = await response.json();
+    return result as AnalysisResult;
   } catch (error) {
-    console.error("Analysis service error:", error);
+    console.error("Frontend service analysis failed:", error);
     throw error;
   }
 };
